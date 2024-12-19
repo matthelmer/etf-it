@@ -168,7 +168,7 @@ def aggregate_holdings(etf_positions):
 def main():
     parser = argparse.ArgumentParser(description="Vanguard ETF Decomposer")
     parser.add_argument(
-        '--positions', default='positions.json',
+        '--positions', default='example-positions.json',
         help='Path to ETF positions JSON file'
     )
     args = parser.parse_args()
