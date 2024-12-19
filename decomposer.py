@@ -118,13 +118,29 @@ def aggregate_holdings(etf_positions):
         csv_file = f"{etf}_decomposed.csv"
         if os.path.exists(csv_file):
             df = pd.read_csv(csv_file)
-            df['Weight'] = df['% of fund'].str.rstrip('%').astype(float) / 100
+            df['Market value'] = df['Market value'].str.replace(
+                r'[\$,]', '', regex=True
+            ).astype(float)
+            df['% of fund'] = df['% of fund'].str.replace(
+                r'[%]', '', regex=True
+            ).astype(float).fillna(0)
+            total_market_value = df['Market value'].sum()
+
+            df['Weight'] = df['% of fund'] / 100
+
+            zero_weight_rows = df['Weight'] == 0
+            df.loc[zero_weight_rows, 'Weight'] = (
+                df.loc[zero_weight_rows, 'Market value'] / total_market_value
+            )
+
             etf_value = position_data['shares'] * position_data['price']
             df['Value'] = etf_value * df['Weight']
             df['Ticker'] = df['Ticker'].str.upper()
             df = df[['Ticker', 'Value']]
+
             df = df.groupby('Ticker', as_index=False).sum()
-            df.rename(columns={'Value': etf}, inplace=True)
+            df.rename(columns={'Value': f"Value of Ticker in {etf.upper()}"},
+                      inplace=True)
             if all_holdings.empty:
                 all_holdings = df
             else:
@@ -133,8 +149,8 @@ def aggregate_holdings(etf_positions):
                 )
         else:
             logging.warning(
-                    f"Holdings file '{csv_file}' not found for ETF '{etf}'. "
-                    "Skipping."
+                f"Holdings file '{csv_file}' not found for ETF '{etf}'. "
+                "Skipping."
             )
 
     if not all_holdings.empty:
@@ -162,7 +178,6 @@ def main():
         logging.error("No ETF positions to process. Exiting.")
         return
 
-    # Selenium WebDriver
     try:
         driver = webdriver.Chrome()  # Ensure chromedriver in PATH
     except WebDriverException as e:
@@ -196,9 +211,9 @@ def main():
         # print summary statistics
         total_portfolio_value = aggregated_holdings['Total'].sum()
         logging.info(f"\nTotal portfolio value: ${total_portfolio_value:,.2f}")
-        logging.info("\nTop 20 ETF component holdings by value:")
-        top_20 = aggregated_holdings.head(20)
-        for _, row in top_20.iterrows():
+        logging.info("\nTop 10 ETF component holdings by value:")
+        top_10 = aggregated_holdings.head(10)
+        for _, row in top_10.iterrows():
             ticker = row['Ticker']
             total_value = row['Total']
             percentage = (total_value / total_portfolio_value) * 100

@@ -6,3 +6,5 @@ __pycache__
 venv
 .env
 *.csv
+*.json
+!example-positions.json
