@@ -47,53 +47,63 @@ def scrape_vanguard_etf(driver, etf_ticker):
         return []
 
     all_data = []
-    table_xpath = ('/html/body/vmf-root/vg-vgn-nav/profile/div/div[2]/'
-                   'portfolio/section/div/div[5]/div/holding-details-'
-                   'container/div/div[1]/div/c11n-tabs/c11n-tab-panel[1]'
-                   '//table')
-    pagination_select_xpath = ('/html/body/vmf-root/vg-vgn-nav/profile/div/'
-                               'div[2]/portfolio/section/div/div[5]/div/'
-                               'holding-details-container/div/div[2]/div[2]/'
-                               'holding-details-pagination/div/div/'
-                               'vmf-pagination/div/div/div/c11n-select/div/'
-                               'select')
+
+    equity_table_xpath = '/html/body/vmf-root/vg-vgn-nav/profile/div/div[2]/portfolio/section/div/div[3]/div[3]/div/holding-details-container/div/div[1]/div/c11n-tabs/c11n-tab-panel[1]/div/div/holding-details-results/div/div[2]/table'
+
+    pagination_select_xpath = '/html/body/vmf-root/vg-vgn-nav/profile/div/div[2]/portfolio/section/div/div[3]/div[3]/div/holding-details-container/div/div[2]/div/div[1]/holding-details-pagination/div/div/vmf-pagination/div/div/div/c11n-select/div/select'
 
     def extract_table_data():
         try:
-            table = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, table_xpath))
+            # try adjusting the number
+            table = WebDriverWait(driver, 7).until(
+                EC.presence_of_element_located((By.XPATH, equity_table_xpath))
             )
             rows = table.find_elements(By.XPATH, './/tbody/tr')
+            logging.info(f"Rows found: {len(rows)}")
             return [[cell.text for cell in row.find_elements(
                 By.XPATH, './/th|.//td')] for row in rows]
-        except (TimeoutException, NoSuchElementException) as e:
-            logging.error(f"Error extracting table data for {etf_ticker}: {e}")
+        except TimeoutException:
+            logging.error(f"Timeout waiting for table to appear for {etf_ticker}")
+            return []
+        except NoSuchElementException:
+            logging.error(f"Table element not found for {etf_ticker}")
+            return []
+        except Exception as e:
+            logging.error(f"Unexpected error extracting table data for {etf_ticker}: {e}")
             return []
 
     try:
+        logging.info(f"Waiting for pagination select to be present for {etf_ticker}")
         select = Select(WebDriverWait(driver, 10).until(
             EC.presence_of_element_located(
                 (By.XPATH, pagination_select_xpath)
             )
         ))
         total_pages = len(select.options)
+        logging.info(f"Pagination select found. Total pages: {total_pages}")
 
         for index in range(total_pages):
             logging.info(f"Processing page {index + 1}/{total_pages} "
                          f"for {etf_ticker}")
             select.select_by_index(index)
             time.sleep(2)
-            all_data.extend(extract_table_data())
-    except (TimeoutException, NoSuchElementException) as e:
-        logging.error(f"Error processing pagination for {etf_ticker}: {e}")
+            page_data = extract_table_data()
+            logging.info(f"Extracted {len(page_data)} rows from page {index + 1}")
+            all_data.extend(page_data)
+    except TimeoutException:
+        logging.error(f"Timeout waiting for pagination select for {etf_ticker}")
+    except NoSuchElementException:
+        logging.error(f"Pagination select element not found for {etf_ticker}")
     except Exception as e:
         logging.error(f"Unexpected error scraping {etf_ticker}: {e}")
 
+    logging.info(f"Total rows extracted for {etf_ticker}: {len(all_data)}")
     return all_data
 
 
-def save_to_csv(data, filename):
-    """Save scraped data to a CSV file."""
+def save_to_csv(data, etf_ticker):
+    """Save scraped data to a CSV file in the 'scraped' directory."""
+    filename = os.path.join("scraped", f"{etf_ticker}.csv")
     if data:
         df = pd.DataFrame(data, columns=[
             'Ticker', 'Holdings', 'CUSIP', 'SEDOL', '% of fund',
@@ -115,7 +125,7 @@ def aggregate_holdings(etf_positions):
             'Shares': position_data['shares'],
             'Price': position_data['price']
         })
-        csv_file = f"{etf}_decomposed.csv"
+        csv_file = os.path.join("scraped", f"{etf}.csv")
         if os.path.exists(csv_file):
             df = pd.read_csv(csv_file)
             df['Market value'] = df['Market value'].str.replace(
@@ -178,6 +188,9 @@ def main():
         logging.error("No ETF positions to process. Exiting.")
         return
 
+    if not os.path.exists("scraped"):
+        os.makedirs("scraped")
+
     try:
         driver = webdriver.Chrome()  # Ensure chromedriver in PATH
     except WebDriverException as e:
@@ -186,11 +199,11 @@ def main():
 
     try:
         for etf in etf_positions:
-            csv_file = f"{etf}_decomposed.csv"
+            csv_file = os.path.join("scraped", f"{etf}.csv")
             if not os.path.exists(csv_file):
                 logging.info(f"Scraping data for {etf}...")
                 holdings_data = scrape_vanguard_etf(driver, etf)
-                save_to_csv(holdings_data, csv_file)
+                save_to_csv(holdings_data, etf)
             else:
                 logging.info(f"Using existing data for {etf}")
     finally:
