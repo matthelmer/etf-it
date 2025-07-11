@@ -2,7 +2,7 @@
 
 ETF-it is an (alpha) tool designed to provide investors with a deeper understanding of the companies that comprise their ETF investments. This information is sometimes not easily accessible.
 
-This tool aims to offer transparency into the exact companies included in ETF holdings, so that retail investors can make better informed decisions about where their investment capital should be allocated.
+The tool aims to offer transparency into the exact companies included in ETF holdings, so that retail investors can make better informed decisions about where their investment capital should be allocated.
 
 
 ## Current Features
